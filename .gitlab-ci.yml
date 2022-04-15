@@ -1,0 +1,53 @@
+stages: 
+    - test
+    - build
+    - deploy
+
+# макрос для логина в докерреестр проекта
+.docker-login: &docker-login
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+
+Test:
+  image: docker:stable
+  stage: test
+  tags:
+    - kub-exec
+  script:
+    - npm i
+    - npm run 
+
+
+Build_container:
+# образ в контейнере которого будет происходить сборка
+  image: gcr.io/kaniko-project/executor:debug
+  stage: build
+# триггер на кнопочку
+  when: manual
+# выполнение макроса
+  <<: *docker-login
+# тег раннера
+  tags:
+    - kub-exec
+# только указанная ветка
+  only:
+    - dev
+# команда сборки
+  script:
+    - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+Deploy_container:
+  stage: deploy
+  when: manual
+  image:
+    name: lachlanevenson/k8s-kubectl:latest
+    entrypoint: ["/bin/sh", "-c"]
+  tags:
+    - kub-exec
+  only:
+    - dev
+  script:
+# костыль подставляющий тег образа вместе тега latest в деплоймент файле  
+    - sed -i "s|latest|${CI_COMMIT_SHORT_SHA}|" deploy.yml
+    - kubectl apply -n acs-ga -f deploy.yml

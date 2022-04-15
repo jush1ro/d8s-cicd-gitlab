@@ -1,0 +1,88 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: acs-ga
+  labels:
+    app: acs-ga
+  namespace: acs-ga
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: acs-ga
+  template:
+    metadata:
+      labels:
+        app: acs-ga
+    spec:
+      containers:
+      - name: app
+        image: собранный_образ
+        imagePullPolicy: Always
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: dockerlogin
+  strategy:
+    type: Recreate
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: acs-ga
+  labels:
+    app: acs-ga
+  namespace: acs-ga
+spec:
+  selector:
+    app: acs-ga
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 5000
+---
+kind: Ingress
+apiVersion: extensions/v1beta1
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+  labels:
+    app: acs-ga
+  name: acs-ga
+  namespace: acs-ga
+spec:
+  rules:
+  - host: ДОМЕН
+    http:
+      paths:
+      - backend:
+          serviceName: acs-ga
+          servicePort: 80
+        path: /
+  tls:
+  - hosts:
+    - ДОМЕН
+    secretName: ingress-tls
+---
+kind: Certificate
+apiVersion: certmanager.k8s.io/v1alpha1
+metadata:
+  labels:
+    app: acs-ga
+  name: acs-ga
+  namespace: acs-ga
+spec:
+  acme:
+    config:
+    - domains:
+      - ДОМЕН
+      http01:
+        ingressClass: nginx
+  dnsNames:
+  - ДОМЕН
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt
+  secretName: ingress-tls
+---
